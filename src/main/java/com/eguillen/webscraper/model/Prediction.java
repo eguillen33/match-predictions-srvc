@@ -1,14 +1,11 @@
 package com.eguillen.webscraper.model;
 
-/*
- * "id": 1.03838732E8, "status": "draft", "created_on": "2022-03-09 23:30:02", "modified_on":
- * "2022-03-10 23:10:08", "league_name": "USA: NBA", "match_id": "1551437", "home_team":
- * "Charlotte Hornets", "away_team": "Boston Celtics", "odd_value": "1.3", "team_home_score": "101",
- * "team_away_score": "115", "match_minute": "FT", "coupon_name": "Coupon 8", "game_prediction":
- * "2", "match_status": "won", "match_date": "10.03.2022", "match_time": "04:00 AM",
- * "match_timestamp": "1646874000", "sport_type": "basketball"
- */
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Document("prediction")
 public class Prediction {
+  @Id
   private int id;
   private String status;
   private String leagueName;
@@ -152,6 +149,16 @@ public class Prediction {
 
   public void setSportType(String sportType) {
     this.sportType = sportType;
+  }
+
+  @Override
+  public String toString() {
+    return "Prediction [id=" + id + ", status=" + status + ", leagueName=" + leagueName
+        + ", matchId=" + matchId + ", homeTeam=" + homeTeam + ", awayTeam=" + awayTeam
+        + ", oddValue=" + oddValue + ", teamHomeScore=" + teamHomeScore + ", teamAwayScore="
+        + teamAwayScore + ", matchMinute=" + matchMinute + ", gamePrediction=" + gamePrediction
+        + ", matchStatus=" + matchStatus + ", matchDate=" + matchDate + ", matchTime=" + matchTime
+        + ", matchTimestamp=" + matchTimestamp + ", sportType=" + sportType + "]";
   }
 
 }
