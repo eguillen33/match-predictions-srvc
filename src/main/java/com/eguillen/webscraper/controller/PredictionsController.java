@@ -1,11 +1,19 @@
 package com.eguillen.webscraper.controller;
 
+import java.time.Duration;
+import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializationContext.SerializationPair;
+
 import com.eguillen.webscraper.model.Predictions;
 import com.eguillen.webscraper.repo.PredictionRepository;
 import com.google.gson.FieldNamingPolicy;
@@ -17,6 +25,7 @@ import okhttp3.Response;
 
 @EnableMongoRepositories(basePackageClasses = PredictionRepository.class)
 @Configuration
+@EnableCaching
 public class PredictionsController {
 
   private static final Logger LOG = LoggerFactory.getLogger(PredictionsController.class);
@@ -38,18 +47,27 @@ public class PredictionsController {
         Gson gson = new GsonBuilder().setPrettyPrinting()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create();
         Predictions predictions = gson.fromJson(response.body().string(), Predictions.class);
+        predictions.setPredictions(predictions.getPredictions().stream()
+            .filter(p -> (p.getLeagueName().contains("NBA"))).collect(Collectors.toList()));
         logPrettyJSON(gson, predictions);
         persistData(repo, predictions);
       }
     };
   }
-  
+
+  @Bean
+  public RedisCacheConfiguration cacheConfiguration() {
+    return RedisCacheConfiguration.defaultCacheConfig().entryTtl(Duration.ofDays(5))
+        .disableCachingNullValues().serializeValuesWith(
+            SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer()));
+  }
+
   private void persistData(PredictionRepository repo, Predictions predictions) {
     LOG.info("Saving prediction data...");
-    repo.save(predictions.getPredictions().get(0));
+    repo.saveAll(predictions.getPredictions());
     LOG.info("Finished saving prediction data...");
   }
-  
+
   private static void logPrettyJSON(Gson gson, Predictions entity) {
     String prettyJson = gson.toJson(entity);
     LOG.info(prettyJson);
