@@ -7,7 +7,7 @@ import com.eguillen.webscraper.model.Prediction;
 
 public interface PredictionService {
 
-  List<Prediction> getPredictions();
+  List<Prediction> getPredictions(String date);
 
-  void fetchPredictions(String date) throws IOException;
+  void fetchPredictions() throws IOException;
 }

@@ -1,6 +1,5 @@
 package com.eguillen.webscraper.resource;
 
-import java.io.IOException;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,24 +21,10 @@ public class PredictionsResource {
   PredictionService predictionService;
 
   @GetMapping("/all")
-  List<Prediction> getAll(@RequestParam("date") String date) {
-    if (date == null || date.isBlank()) {
-      LOG.error("Missing date parameter");
-      return null;
-    }
-    LOG.info("Loading predictions...");
-    List<Prediction> predictions = predictionService.getPredictions();
-
-    if (predictions == null || predictions.isEmpty()) {
-      LOG.info(String.format("No predictions exists for date=%s. Fetching data...", date));
-//      try {
-//        predictionService.fetchPredictions(date);
-//      } catch (IOException e) {
-//        // TODO Auto-generated catch block
-//        e.printStackTrace();
-//      }
-    }
-
+  List<Prediction> getAll(@RequestParam(name = "date", required = false) String date) {
+    LOG.info(String.format("Loading predictions for date: %s", date));
+    List<Prediction> predictions = predictionService.getPredictions(date);
     return predictions;
   }
+
 }

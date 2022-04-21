@@ -1,8 +1,9 @@
 package com.eguillen.webscraper.service.impl;
 
 import java.io.IOException;
+import java.text.DateFormat;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,12 +11,13 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 import org.springframework.stereotype.Service;
 import com.eguillen.webscraper.model.Prediction;
-import com.eguillen.webscraper.model.Predictions;
 import com.eguillen.webscraper.repo.PredictionRepository;
 import com.eguillen.webscraper.service.PredictionService;
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -25,44 +27,71 @@ import okhttp3.Response;
 @Service
 public class PredictionServiceImpl implements PredictionService {
   private static final Logger LOG = LoggerFactory.getLogger(PredictionServiceImpl.class);
-  private static final String BASE_URL =
-      "https://daily-betting-tips.p.rapidapi.com/daily-betting-tip-api/items/daily_betting_tips";
-  private static final String DATE_PARAM = "?q=";
+  private static final String URL =
+      "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?apiKey=e6bcd5f37bb6d16c32aaef9fe9023a0c&regions=us&markets=h2h,spreads,totals";
   private OkHttpClient client = new OkHttpClient();
 
   @Autowired
   PredictionRepository repo;
 
   @Override
-  public List<Prediction> getPredictions() {
-    return repo.findAll();
+  public List<Prediction> getPredictions(String date) {
+    LOG.info(String.format("Getting predictions for date: %s", date));
+    List<Prediction> predictions = new ArrayList<>();
+
+    if (date != null) {
+      // Check if we have data stored in redis cache or DB
+      predictions = getFromCacheOrDB(date);
+    }
+
+    // If both cache and DB miss, fetch from external resource and save in DB and cache
+    if ((predictions == null || predictions.isEmpty()) && date == null) {
+      try {
+        fetchPredictions();
+        predictions = getFromCacheOrDB(date);
+      } catch (IOException e) {
+        throw new RuntimeException("Error fetching predictions", e);
+      }
+    }
+
+    return predictions;
+  }
+
+  private List<Prediction> getFromCacheOrDB(String date) {
+    // Try fetch from Redis cache
+    List<Prediction> predictions = new ArrayList<>();
+
+    // If cache miss, try fetch from DB
+    if (predictions == null || predictions.isEmpty()) {
+      LOG.info(String.format("Cache miss. Fetching data from DB..."));
+      predictions = repo.findAll();
+    }
+
+    return predictions;
   }
 
   @Override
-  public void fetchPredictions(String date) throws IOException {
-    Request request = new Request.Builder().url(buildURL(date)).get()
-        .addHeader("content-type", "application/json").addHeader("connection", "keep-alive")
-        .addHeader("x-rapidapi-host", "daily-betting-tips.p.rapidapi.com")
-        .addHeader("x-rapidapi-key", "6MFB3oTLJVmshMRUybuYAf2kGntKp1EpupFjsnJdaj22gd9qib").build();
+  public void fetchPredictions() throws IOException {
+    Request request = new Request.Builder().url(URL).get().build();
 
     try (Response response = client.newCall(request).execute()) {
-      Gson gson = new GsonBuilder().setPrettyPrinting()
+      String body = response.body().string();
+      LOG.info("Raw response body:\n" + body);
+
+      Gson gson = new GsonBuilder().setPrettyPrinting().setDateFormat(DateFormat.SHORT)
           .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create();
-      Predictions predictions = gson.fromJson(response.body().string(), Predictions.class);
-      predictions.setPredictions(predictions.getPredictions().stream()
-          .filter(p -> (p.getLeagueName().contains("NBA"))).collect(Collectors.toList()));
+
+      List<Prediction> predictions =
+          gson.fromJson(body, new TypeToken<ArrayList<Prediction>>() {}.getType());
+
       LOG.info("Found prediction data...");
       logPrettyJSON(gson, predictions);
-      repo.saveAll(predictions.getPredictions());
+      repo.saveAll(predictions);
     }
   }
 
-  private String buildURL(String date) {
-    return new StringBuilder(BASE_URL).append(DATE_PARAM).append(date).toString();
-  }
-
-  private void logPrettyJSON(Gson gson, Predictions entity) {
-    String prettyJson = gson.toJson(entity);
+  private void logPrettyJSON(Gson gson, List<Prediction> predictions) {
+    String prettyJson = gson.toJson(predictions);
     LOG.info(prettyJson);
   }
 
